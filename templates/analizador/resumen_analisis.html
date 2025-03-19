@@ -1,0 +1,149 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Resumen del Análisis - {{ analisis_principal.url }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- Resumen General -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h2 class="h5 mb-0">Resumen General</h2>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-8">
+                    <h3 class="h6 text-secondary mb-2">URL Principal</h3>
+                    <p class="mb-2"><a href="{{ analisis_principal.url }}" target="_blank">{{ analisis_principal.url }}</a></p>
+                    <h3 class="h6 text-secondary mb-2">Fecha del Análisis</h3>
+                    <p class="mb-0">{{ analisis_principal.fecha_analisis|date:"d/m/Y H:i" }}</p>
+                </div>
+                <div class="col-md-4 text-center">
+                    <div class="display-4 fw-bold {% if puntuacion_promedio >= 80 %}text-success{% elif puntuacion_promedio >= 60 %}text-warning{% else %}text-danger{% endif %}">
+                        {{ puntuacion_promedio|floatformat:1 }}/100
+                    </div>
+                    <p class="text-muted mb-0">Puntuación Promedio</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Estadísticas -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <h3 class="display-4 fw-bold text-primary mb-2">{{ total_urls }}</h3>
+                    <p class="text-muted mb-0">URLs Analizadas</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <h3 class="display-4 fw-bold text-danger mb-2">{{ hallazgos_totales.error|default:0 }}</h3>
+                    <p class="text-muted mb-0">Errores</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <h3 class="display-4 fw-bold text-warning mb-2">{{ hallazgos_totales.warning|default:0 }}</h3>
+                    <p class="text-muted mb-0">Advertencias</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <h3 class="display-4 fw-bold text-info mb-2">{{ hallazgos_totales.info|default:0 }}</h3>
+                    <p class="text-muted mb-0">Recomendaciones</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Archivos Técnicos -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h2 class="h5 mb-0">robots.txt</h2>
+                </div>
+                <div class="card-body">
+                    {% if robots_content %}
+                    <pre class="bg-light p-3 rounded"><code>{{ robots_content }}</code></pre>
+                    {% else %}
+                    <div class="alert alert-warning mb-0">
+                        <i class="fas fa-exclamation-triangle me-2"></i>No se encontró el archivo robots.txt
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h2 class="h5 mb-0">sitemap.xml</h2>
+                </div>
+                <div class="card-body">
+                    {% if sitemap_content %}
+                    <pre class="bg-light p-3 rounded"><code>{{ sitemap_content }}</code></pre>
+                    {% else %}
+                    <div class="alert alert-warning mb-0">
+                        <i class="fas fa-exclamation-triangle me-2"></i>No se encontró el archivo sitemap.xml
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- URLs Analizadas -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="h5 mb-0">URLs Analizadas</h2>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>URL</th>
+                            <th>Título</th>
+                            <th>Puntuación</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for analisis in urls_analizadas %}
+                        <tr>
+                            <td>{{ analisis.url }}</td>
+                            <td>{{ analisis.titulo }}</td>
+                            <td>
+                                <span class="badge bg-{% if analisis.puntuacion >= 80 %}success{% elif analisis.puntuacion >= 60 %}warning{% else %}danger{% endif %}">
+                                    {{ analisis.puntuacion }}/100
+                                </span>
+                            </td>
+                            <td>
+                                <a href="{% url 'analizador:detalle_analisis' analisis.pk %}" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-eye me-1"></i>Ver detalles
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Botón Volver -->
+    <div class="text-end mt-4">
+        <a href="{% url 'analizador:inicio' %}" class="btn btn-primary">
+            <i class="fas fa-arrow-left me-2"></i>Volver al Inicio
+        </a>
+    </div>
+</div>
+{% endblock %} 

@@ -1,0 +1,175 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ analisis.url }} - Análisis SEO{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- Tarjetas informativas -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-search fa-2x text-primary mb-3"></i>
+                    <h3 class="h5">Análisis Completo</h3>
+                    <p class="text-secondary mb-0">Evaluamos más de 20 factores SEO importantes</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-chart-line fa-2x text-primary mb-3"></i>
+                    <h3 class="h5">Puntuación Detallada</h3>
+                    <p class="text-secondary mb-0">Obtén una calificación clara de tu SEO</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-lightbulb fa-2x text-primary mb-3"></i>
+                    <h3 class="h5">Recomendaciones</h3>
+                    <p class="text-secondary mb-0">Sugerencias prácticas para mejorar</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resumen del análisis -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h2 class="h5 mb-0">Resumen del Análisis</h2>
+        </div>
+        <div class="card-body">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h3 class="h6 text-secondary mb-2">URL Analizada</h3>
+                    <p class="mb-2"><a href="{{ analisis.url }}" target="_blank">{{ analisis.url }}</a></p>
+                    <h3 class="h6 text-secondary mb-2">Fecha del Análisis</h3>
+                    <p class="mb-0">{{ analisis.fecha_analisis|date:"d/m/Y H:i" }}</p>
+                </div>
+                <div class="col-md-4 text-center">
+                    <div class="display-4 fw-bold {% if analisis.puntuacion >= 80 %}text-success{% elif analisis.puntuacion >= 60 %}text-warning{% else %}text-danger{% endif %}">
+                        {{ analisis.puntuacion }}/100
+                    </div>
+                    <p class="text-muted mb-0">Puntuación SEO</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hallazgos y Recomendaciones -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h2 class="h5 mb-0">Hallazgos y Recomendaciones</h2>
+        </div>
+        <div class="card-body">
+            {% if hallazgos %}
+            {% regroup hallazgos by tipo as hallazgos_por_tipo %}
+            {% for tipo in hallazgos_por_tipo %}
+            <div class="mb-4">
+                <h3 class="h6 mb-3">
+                    <span class="badge bg-{% if tipo.grouper == 'error' %}danger{% elif tipo.grouper == 'warning' %}warning{% else %}info{% endif %} me-2">
+                        {{ tipo.grouper|title }}
+                    </span>
+                </h3>
+                <ul class="list-unstyled mb-0">
+                    {% for hallazgo in tipo.list %}
+                    <li class="mb-2">{{ hallazgo.descripcion }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endfor %}
+            {% else %}
+            <p class="text-muted mb-0">No se encontraron hallazgos.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Enlaces Encontrados -->
+    <div class="card mb-4">
+        <div class="card-header" role="button" data-bs-toggle="collapse" data-bs-target="#collapseEnlaces">
+            <h2 class="h5 mb-0 d-flex justify-content-between align-items-center">
+                Enlaces Encontrados
+                <i class="fas fa-chevron-down"></i>
+            </h2>
+        </div>
+        <div class="collapse" id="collapseEnlaces">
+            <div class="card-body">
+                {% if enlaces %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>URL</th>
+                                <th>Texto</th>
+                                <th>Tipo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for enlace in enlaces %}
+                            <tr>
+                                <td><a href="{{ enlace.url }}" target="_blank">{{ enlace.url }}</a></td>
+                                <td>{{ enlace.texto }}</td>
+                                <td><span class="badge bg-{% if enlace.tipo == 'interno' %}primary{% else %}secondary{% endif %}">{{ enlace.tipo }}</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">No se encontraron enlaces.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Imágenes Encontradas -->
+    <div class="card mb-4">
+        <div class="card-header" role="button" data-bs-toggle="collapse" data-bs-target="#collapseImagenes">
+            <h2 class="h5 mb-0 d-flex justify-content-between align-items-center">
+                Imágenes Encontradas
+                <i class="fas fa-chevron-down"></i>
+            </h2>
+        </div>
+        <div class="collapse" id="collapseImagenes">
+            <div class="card-body">
+                {% if imagenes %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Vista Previa</th>
+                                <th>URL</th>
+                                <th>Texto Alternativo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for imagen in imagenes %}
+                            <tr>
+                                <td>
+                                    <img src="{{ imagen.url }}" alt="{{ imagen.alt }}" style="max-height: 50px; max-width: 100px;">
+                                </td>
+                                <td><a href="{{ imagen.url }}" target="_blank">{{ imagen.url }}</a></td>
+                                <td>{{ imagen.alt|default:"Sin texto alternativo" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">No se encontraron imágenes.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Botón Volver -->
+    <div class="text-end">
+        <a href="{% url 'analizador:resumen_analisis' analisis.analisis_principal.id|default:analisis.id %}" class="btn btn-primary">
+            <i class="fas fa-arrow-left me-2"></i>Volver al Resumen
+        </a>
+    </div>
+</div>
+{% endblock %} 

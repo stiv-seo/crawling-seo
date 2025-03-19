@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Analizador SEO{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- Formulario de análisis -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h1 class="h4 mb-0">Analizador SEO</h1>
+        </div>
+        <div class="card-body">
+            <form method="post" class="mb-0" id="formAnalisis">
+                {% csrf_token %}
+                <div class="input-group">
+                    <input type="url" name="url" class="form-control" placeholder="Ingrese la URL del sitio web" required>
+                    <button type="submit" class="btn btn-primary" id="btnAnalizar">
+                        <i class="fas fa-search me-2"></i>Analizar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Barra de progreso -->
+    <div class="progress mb-4 d-none" id="progressBar">
+        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+            <span id="progressText">Analizando... 0/50 URLs</span>
+        </div>
+    </div>
+
+    <!-- Mensajes -->
+    {% if messages %}
+    <div class="mb-4">
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }}" role="alert">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Análisis recientes -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h2 class="h5 mb-0">Análisis Recientes</h2>
+        </div>
+        <div class="card-body">
+            {% if analisis_recientes %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>URL Principal</th>
+                            <th>Fecha</th>
+                            <th>Puntuación</th>
+                            <th>URLs Analizadas</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for analisis in analisis_recientes %}
+                        <tr>
+                            <td>{{ analisis.url }}</td>
+                            <td>{{ analisis.fecha_analisis|date:"d/m/Y H:i" }}</td>
+                            <td>
+                                <span class="badge bg-{% if analisis.puntuacion >= 80 %}success{% elif analisis.puntuacion >= 60 %}warning{% else %}danger{% endif %}">
+                                    {{ analisis.puntuacion }}/100
+                                </span>
+                            </td>
+                            <td>
+                                {% with urls_count=analisis.paginas_analizadas.count %}
+                                {{ urls_count }} página{{ urls_count|pluralize }}
+                                {% endwith %}
+                            </td>
+                            <td>
+                                <a href="{% url 'analizador:detalle_analisis' analisis.pk %}" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-eye me-1"></i>Ver detalles
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">No hay análisis recientes.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('formAnalisis');
+    const progressBar = document.getElementById('progressBar');
+    const progressBarInner = progressBar.querySelector('.progress-bar');
+    const progressText = document.getElementById('progressText');
+    const btnAnalizar = document.getElementById('btnAnalizar');
+
+    form.addEventListener('submit', function(e) {
+        progressBar.classList.remove('d-none');
+        btnAnalizar.disabled = true;
+        let progress = 0;
+        let urlsAnalizadas = 0;
+
+        const interval = setInterval(function() {
+            if (progress < 95) {
+                progress += Math.random() * 5;
+                urlsAnalizadas = Math.floor((progress / 100) * 50);
+                progressBarInner.style.width = progress + '%';
+                progressBarInner.setAttribute('aria-valuenow', progress);
+                progressText.textContent = `Analizando... ${urlsAnalizadas}/50 URLs`;
+            }
+        }, 500);
+
+        // Limpiar el intervalo después de 30 segundos por seguridad
+        setTimeout(function() {
+            clearInterval(interval);
+        }, 30000);
+    });
+});
+</script>
+{% endblock %}
+{% endblock %} 
