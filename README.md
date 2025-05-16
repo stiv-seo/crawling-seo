@@ -86,10 +86,4 @@ analizador/
 
 ## Licencia
 
-Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) para más detalles.
-
-## Contacto
-
-Tu Nombre - [@tutwitter](https://twitter.com/tutwitter) - email@ejemplo.com
-
-Link del Proyecto: [https://github.com/tu-usuario/analizador-seo-ia](https://github.com/tu-usuario/analizador-seo-ia) 
+Este proyecto está bajo la Licencia SEO de Pragma
