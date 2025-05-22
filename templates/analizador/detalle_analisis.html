@@ -47,7 +47,21 @@
                     <h3 class="h6 text-secondary mb-2">URL Analizada</h3>
                     <p class="mb-2"><a href="{{ analisis.url }}" target="_blank">{{ analisis.url }}</a></p>
                     <h3 class="h6 text-secondary mb-2">Fecha del Análisis</h3>
-                    <p class="mb-0">{{ analisis.fecha_analisis|date:"d/m/Y H:i" }}</p>
+                    <p class="mb-3">{{ analisis.fecha_analisis|date:"d/m/Y H:i" }}</p>
+
+                    {% with main_analisis=analisis.analisis_principal|default:analisis %}
+                    <h3 class="h6 text-secondary mb-2">Tecnología del Sitio</h3>
+                    <p class="mb-3">{{ main_analisis.tecnologia_sitio|default:"No especificada" }}</p>
+                    
+                    <h3 class="h6 text-secondary mb-2">Alcance del Rastreo</h3>
+                    {% if main_analisis.crawl_scope == 'single_url' %}
+                    <p class="mb-0">URL Única</p>
+                    {% elif main_analisis.crawl_scope == 'multiple_pages' %}
+                    <p class="mb-0">Múltiples Páginas (Solicitadas: {{ main_analisis.num_pages_solicitadas }} página{{ main_analisis.num_pages_solicitadas|pluralize }})</p>
+                    {% else %}
+                    <p class="mb-0">No especificado</p>
+                    {% endif %}
+                    {% endwith %}
                 </div>
                 <div class="col-md-4 text-center">
                     <div class="display-4 fw-bold {% if analisis.puntuacion >= 80 %}text-success{% elif analisis.puntuacion >= 60 %}text-warning{% else %}text-danger{% endif %}">
@@ -66,23 +80,35 @@
         </div>
         <div class="card-body">
             {% if hallazgos %}
-            {% regroup hallazgos by tipo as hallazgos_por_tipo %}
-            {% for tipo in hallazgos_por_tipo %}
-            <div class="mb-4">
-                <h3 class="h6 mb-3">
-                    <span class="badge bg-{% if tipo.grouper == 'error' %}danger{% elif tipo.grouper == 'warning' %}warning{% else %}info{% endif %} me-2">
-                        {{ tipo.grouper|title }}
-                    </span>
-                </h3>
-                <ul class="list-unstyled mb-0">
-                    {% for hallazgo in tipo.list %}
-                    <li class="mb-2">{{ hallazgo.descripcion }}</li>
-                    {% endfor %}
-                </ul>
-            </div>
-            {% endfor %}
+            {% if hallazgos %}
+                {% regroup hallazgos by tipo as hallazgos_por_tipo %}
+                {% for grupo in hallazgos_por_tipo %}
+                    <div class="mb-4">
+                        <h4 class="h6 mb-3">
+                            {% if grupo.grouper == 'recomendacion' %}
+                                <span class="badge bg-success me-2"><i class="fas fa-lightbulb me-1"></i> {{ grupo.grouper|title }} (IA)</span>
+                            {% elif grupo.grouper == 'error' %}
+                                <span class="badge bg-danger me-2"><i class="fas fa-times-circle me-1"></i> {{ grupo.grouper|title }}</span>
+                            {% elif grupo.grouper == 'warning' %}
+                                <span class="badge bg-warning text-dark me-2"><i class="fas fa-exclamation-triangle me-1"></i> {{ grupo.grouper|title }}</span>
+                            {% else %}
+                                <span class="badge bg-info me-2"><i class="fas fa-info-circle me-1"></i> {{ grupo.grouper|title }}</span>
+                            {% endif %}
+                        </h4>
+                        <ul class="list-group">
+                            {% for hallazgo in grupo.list %}
+                                <li class="list-group-item">
+                                    {% if grupo.grouper == 'recomendacion' %}
+                                        <i class="fas fa-rocket text-success me-2"></i>
+                                    {% endif %}
+                                    {{ hallazgo.descripcion }}
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                {% endfor %}
             {% else %}
-            <p class="text-muted mb-0">No se encontraron hallazgos.</p>
+            <p class="text-muted mb-0">No se encontraron hallazgos ni recomendaciones.</p>
             {% endif %}
         </div>
     </div>

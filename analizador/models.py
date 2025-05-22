@@ -18,6 +18,25 @@ class Analisis(models.Model):
     descripcion = models.TextField(blank=True, verbose_name='Descripción')
     robots_txt = models.BooleanField(default=False, verbose_name='Contenido robots.txt')
     sitemap_xml = models.BooleanField(default=False, verbose_name='Contenido sitemap.xml')
+
+    # New fields for crawl scope and technology
+    crawl_scope = models.CharField(
+        max_length=20,
+        choices=[('single_url', 'Single URL'), ('multiple_pages', 'Multiple Pages')],
+        default='single_url',
+        verbose_name='Crawl Scope'
+    )
+    num_pages_solicitadas = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name='Number of Pages Requested'
+    )
+    tecnologia_sitio = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Website Technology'
+    )
+
     analisis_principal = models.ForeignKey(
         'self',
         null=True,

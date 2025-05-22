@@ -11,14 +11,13 @@
             <h1 class="h4 mb-0">Analizador SEO</h1>
         </div>
         <div class="card-body">
+            {% load bootstrap5 %}
             <form method="post" class="mb-0" id="formAnalisis">
                 {% csrf_token %}
-                <div class="input-group">
-                    <input type="url" name="url" class="form-control" placeholder="Ingrese la URL del sitio web" required>
-                    <button type="submit" class="btn btn-primary" id="btnAnalizar">
-                        <i class="fas fa-search me-2"></i>Analizar
-                    </button>
-                </div>
+                {% bootstrap_form form %}
+                <button type="submit" class="btn btn-primary mt-3" id="btnAnalizar">
+                    <i class="fas fa-search me-2"></i>Analizar
+                </button>
             </form>
         </div>
     </div>
@@ -95,12 +94,45 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('formAnalisis');
+    const crawlScopeField = document.getElementById('id_crawl_scope');
+    const numPagesGroup = document.getElementById('div_id_num_pages'); // Assuming django-bootstrap5 creates a div with this ID structure
     const progressBar = document.getElementById('progressBar');
     const progressBarInner = progressBar.querySelector('.progress-bar');
     const progressText = document.getElementById('progressText');
     const btnAnalizar = document.getElementById('btnAnalizar');
 
+    // Function to toggle visibility of num_pages field
+    function toggleNumPagesField() {
+        if (crawlScopeField && numPagesGroup) {
+            if (crawlScopeField.value === 'multiple_pages') {
+                numPagesGroup.style.display = '';
+            } else {
+                numPagesGroup.style.display = 'none';
+            }
+        }
+    }
+
+    // Initial check on page load
+    toggleNumPagesField();
+
+    // Add event listener for changes in crawl_scope
+    if (crawlScopeField) {
+        crawlScopeField.addEventListener('change', toggleNumPagesField);
+    }
+
     form.addEventListener('submit', function(e) {
+        // Validate num_pages if crawl_scope is 'multiple_pages'
+        if (crawlScopeField && crawlScopeField.value === 'multiple_pages') {
+            const numPagesField = document.getElementById('id_num_pages');
+            if (numPagesField && (!numPagesField.value || parseInt(numPagesField.value) < 1)) {
+                // This is a basic client-side validation.
+                // Django's form validation will handle it on the server-side.
+                // alert('Please enter a valid number of pages (minimum 1).');
+                // e.preventDefault(); // Stop form submission if invalid
+                // return;
+            }
+        }
+
         progressBar.classList.remove('d-none');
         btnAnalizar.disabled = true;
         let progress = 0;
@@ -124,4 +156,4 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endblock %}
-{% endblock %} 
+{% endblock %}
