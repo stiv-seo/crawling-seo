@@ -16,7 +16,19 @@
                     <h3 class="h6 text-secondary mb-2">URL Principal</h3>
                     <p class="mb-2"><a href="{{ analisis_principal.url }}" target="_blank">{{ analisis_principal.url }}</a></p>
                     <h3 class="h6 text-secondary mb-2">Fecha del Análisis</h3>
-                    <p class="mb-0">{{ analisis_principal.fecha_analisis|date:"d/m/Y H:i" }}</p>
+                    <p class="mb-3">{{ analisis_principal.fecha_analisis|date:"d/m/Y H:i" }}</p>
+                    
+                    <h3 class="h6 text-secondary mb-2">Tecnología del Sitio</h3>
+                    <p class="mb-3">{{ analisis_principal.tecnologia_sitio|default:"No especificada" }}</p>
+                    
+                    <h3 class="h6 text-secondary mb-2">Alcance del Rastreo</h3>
+                    {% if analisis_principal.crawl_scope == 'single_url' %}
+                    <p class="mb-0">URL Única</p>
+                    {% elif analisis_principal.crawl_scope == 'multiple_pages' %}
+                    <p class="mb-0">Múltiples Páginas (Solicitadas: {{ analisis_principal.num_pages_solicitadas }} página{{ analisis_principal.num_pages_solicitadas|pluralize }}, Analizadas: {{ total_urls }} página{{ total_urls|pluralize }})</p>
+                    {% else %}
+                    <p class="mb-0">No especificado</p>
+                    {% endif %}
                 </div>
                 <div class="col-md-4 text-center">
                     <div class="display-4 fw-bold {% if puntuacion_promedio >= 80 %}text-success{% elif puntuacion_promedio >= 60 %}text-warning{% else %}text-danger{% endif %}">
@@ -58,7 +70,15 @@
             <div class="card h-100">
                 <div class="card-body text-center">
                     <h3 class="display-4 fw-bold text-info mb-2">{{ hallazgos_totales.info|default:0 }}</h3>
-                    <p class="text-muted mb-0">Recomendaciones</p>
+                    <p class="text-muted mb-0">Información</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <h3 class="display-4 fw-bold text-success mb-2">{{ hallazgos_totales.recomendacion|default:0 }}</h3>
+                    <p class="text-muted mb-0">Recomendaciones (IA)</p>
                 </div>
             </div>
         </div>

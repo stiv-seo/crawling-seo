@@ -17,10 +17,14 @@ from .utils import (
     obtener_codigo_estado,
     obtener_encabezados,
     obtener_metadatos,
-    obtener_imagenes,
-    obtener_enlaces,
-    encontrar_robots_sitemap,
-    calcular_puntuacion_seo
+    obtener_imagenes, 
+    obtener_enlaces,  
+    # encontrar_robots_sitemap, 
+    calcular_puntuacion_seo, 
+    obtener_urls_sitio,
+    analizar_contenido_pagina, 
+    verificar_archivos_seo,
+    obtener_recomendacion_ia # New import for AI recommendations
 )
 from .forms import AnalisisForm
 from django.urls import reverse
@@ -130,48 +134,27 @@ class ResumenAnalisisView(DetailView):
         return context
 
 
-def obtener_urls_sitio(url_base, soup, urls_visitadas=None, max_urls=100):
-    """
-    Función recursiva para obtener todas las URLs del sitio.
-    """
-    if urls_visitadas is None:
-        urls_visitadas = set()
-    
-    # Obtener el dominio base
-    dominio_base = urlparse(url_base).netloc
-    urls_encontradas = set()
-
-    # Encontrar todos los enlaces en la página actual
-    for link in soup.find_all('a', href=True):
-        href = link.get('href', '')
-        if href:
-            # Convertir URL relativa a absoluta
-            url_absoluta = urljoin(url_base, href)
-            
-            # Verificar que la URL pertenece al mismo dominio
-            if urlparse(url_absoluta).netloc == dominio_base:
-                # Limpiar la URL (eliminar fragmentos y parámetros de consulta)
-                url_limpia = url_absoluta.split('#')[0].split('?')[0]
-                
-                # Agregar la URL si no ha sido visitada y no excede el límite
-                if url_limpia not in urls_visitadas and len(urls_visitadas) < max_urls:
-                    urls_encontradas.add(url_limpia)
-
-    return urls_encontradas
+# obtener_urls_sitio function has been moved to utils.py
 
 
 def inicio(request):
+    form = AnalisisForm()
     if request.method == 'POST':
-        url = request.POST.get('url')
-        try:
-            # Validar URL
-            if not url.startswith(('http://', 'https://')):
-                url = 'https://' + url
+        form = AnalisisForm(request.POST)
+        if form.is_valid():
+            url = form.cleaned_data['url']
+            crawl_scope = form.cleaned_data['crawl_scope']
+            num_pages = form.cleaned_data.get('num_pages') # Can be None
+            website_technology = form.cleaned_data.get('website_technology')
 
             # Conjunto para almacenar todas las URLs encontradas
             urls_visitadas = set()
             urls_por_visitar = {url}
-            max_urls = 50  # Límite de URLs a analizar
+
+            if crawl_scope == 'single_url':
+                max_urls = 1
+            else: # multiple_pages
+                max_urls = num_pages if num_pages else 10 # Default to 10 if not provided for some reason
 
             # Crear el análisis principal
             analisis_principal = None
@@ -190,221 +173,159 @@ def inicio(request):
                     response.raise_for_status()
                     soup = BeautifulSoup(response.text, 'html.parser')
 
-                    # Inicializar puntuación
-                    puntuacion = 100
-                    hallazgos = []
+                    # Inicializar puntuación para la página actual
+                    puntuacion_pagina = 100 # Start with a base score for the page
 
-                    # Analizar título
-                    titulo = soup.title.string if soup.title else url_actual
-                    if not titulo:
-                        titulo = url_actual  # Usar la URL como título si no hay título
-                        puntuacion -= 10
-                        hallazgos.append(Hallazgo(
-                            tipo='error',
-                            descripcion='La página no tiene título. El título es crucial para el SEO.'
-                        ))
-                    elif len(titulo) < 10:
-                        puntuacion -= 5
-                        hallazgos.append(Hallazgo(
-                            tipo='warning',
-                            descripcion='El título es demasiado corto. Se recomienda entre 50-60 caracteres.'
-                        ))
-                    elif len(titulo) > 60:
-                        puntuacion -= 3
-                        hallazgos.append(Hallazgo(
-                            tipo='info',
-                            descripcion='El título es demasiado largo. Se recomienda acortarlo a 50-60 caracteres.'
-                        ))
+                    # Analizar contenido de la página usando la nueva función de utils.py
+                    contenido_info = analizar_contenido_pagina(soup, url_actual, website_technology)
+                    
+                    # Extraer datos del resultado de analizar_contenido_pagina
+                    titulo_pagina = contenido_info['titulo'] if contenido_info['titulo'] else url_actual # Use URL if title is empty
+                    descripcion_pagina = contenido_info['descripcion_meta']
+                    
+                    # Lista para todos los hallazgos (de contenido y de archivos SEO)
+                    todos_hallazgos_info_pagina = list(contenido_info['hallazgos_info']) # Make a mutable copy
 
-                    # Analizar meta descripción
-                    meta_desc = soup.find('meta', attrs={'name': 'description'})
-                    descripcion = meta_desc.get('content', '') if meta_desc else ''
-                    if not descripcion:
-                        puntuacion -= 10
-                        hallazgos.append(Hallazgo(
-                            tipo='error',
-                            descripcion='No se encontró meta descripción. Es importante para el SEO.'
-                        ))
-                    elif len(descripcion) < 50:
-                        puntuacion -= 5
-                        hallazgos.append(Hallazgo(
-                            tipo='warning',
-                            descripcion='La meta descripción es demasiado corta. Se recomienda entre 150-160 caracteres.'
-                        ))
-                    elif len(descripcion) > 160:
-                        puntuacion -= 3
-                        hallazgos.append(Hallazgo(
-                            tipo='info',
-                            descripcion='La meta descripción es demasiado larga. Se recomienda acortarla a 150-160 caracteres.'
-                        ))
+                    # Ajustar puntuación basada en hallazgos de contenido (ejemplo)
+                    # This simplistic scoring adjustment should be refined or replaced by calcular_puntuacion_seo
+                    for hallazgo_item in todos_hallazgos_info_pagina:
+                        if hallazgo_item['tipo'] == 'error':
+                            puntuacion_pagina -= 10
+                        elif hallazgo_item['tipo'] == 'warning':
+                            puntuacion_pagina -= 5
+                        elif hallazgo_item['tipo'] == 'info': # Infos usually don't decrease score, but can
+                            puntuacion_pagina -= 1
+                    
+                    # Crear el objeto Analisis
+                    current_analisis_data = {
+                        'url': url_actual,
+                        'titulo': titulo_pagina,
+                        'descripcion': descripcion_pagina,
+                        'codigo_estado': response.status_code,
+                        'robots_txt': False,  # Default, será actualizado para la URL principal
+                        'sitemap_xml': False, # Default, será actualizado para la URL principal
+                        # 'puntuacion' se establecerá después de considerar archivos SEO si es la URL principal
+                    }
 
-                    # Analizar encabezados
-                    h1_tags = soup.find_all('h1')
-                    if not h1_tags:
-                        puntuacion -= 10
-                        hallazgos.append(Hallazgo(
-                            tipo='error',
-                            descripcion='No se encontró encabezado H1. Cada página debe tener un H1.'
-                        ))
-                    elif len(h1_tags) > 1:
-                        puntuacion -= 5
-                        hallazgos.append(Hallazgo(
-                            tipo='warning',
-                            descripcion='Múltiples encabezados H1 encontrados. Se recomienda usar solo uno.'
-                        ))
+                    if url_actual == url: # Es la URL principal del análisis
+                        current_analisis_data['crawl_scope'] = crawl_scope
+                        current_analisis_data['num_pages_solicitadas'] = num_pages if crawl_scope == 'multiple_pages' else 1
+                        current_analisis_data['tecnologia_sitio'] = website_technology
+                        
+                        # Verificar robots.txt y sitemap.xml para la URL principal
+                        archivos_seo_info = verificar_archivos_seo(url)
+                        current_analisis_data['robots_txt'] = archivos_seo_info['robots_txt_exists']
+                        current_analisis_data['sitemap_xml'] = archivos_seo_info['sitemap_xml_exists']
+                        todos_hallazgos_info_pagina.extend(archivos_seo_info['hallazgos_info'])
 
-                    # Crear el análisis
-                    analisis = Analisis.objects.create(
-                        url=url_actual,
-                        titulo=titulo,
-                        descripcion=descripcion,
-                        codigo_estado=response.status_code,
-                        robots_txt=False,
-                        sitemap_xml=False,
-                        puntuacion=max(0, min(100, puntuacion))
-                    )
+                        # Ajustar puntuación por archivos SEO (ejemplo)
+                        if not archivos_seo_info['robots_txt_exists']:
+                            puntuacion_pagina -= 2 # Similar to old logic
+                        if not archivos_seo_info['sitemap_xml_exists']:
+                            puntuacion_pagina -= 2 # Similar to old logic
+                    
+                    current_analisis_data['puntuacion'] = max(0, min(100, puntuacion_pagina))
+                    analisis_actual = Analisis.objects.create(**current_analisis_data)
 
                     # Guardar el análisis principal o agregarlo a la lista de relacionados
                     if url_actual == url:
-                        analisis_principal = analisis
+                        analisis_principal = analisis_actual
                     else:
-                        analisis_relacionados.append(analisis)
+                        analisis_relacionados.append(analisis_actual)
 
-                    # Guardar hallazgos
-                    for hallazgo in hallazgos:
-                        hallazgo.analisis = analisis
-                        hallazgo.save()
-
-                    # Analizar imágenes
-                    for img in soup.find_all('img'):
-                        img_url = img.get('src', '')
-                        if img_url:
-                            img_url = urljoin(url_actual, img_url)
-                            alt_text = img.get('alt', '')
-                            if not alt_text:
-                                puntuacion -= 2
-                                Hallazgo.objects.create(
-                                    analisis=analisis,
-                                    tipo='warning',
-                                    descripcion=f'Imagen sin texto alternativo: {img_url}'
-                                )
-                            Imagen.objects.create(
-                                analisis=analisis,
-                                url=img_url,
-                                alt=alt_text
-                            )
-
-                    # Analizar enlaces y obtener nuevas URLs
-                    enlaces_internos = 0
-                    enlaces_externos = 0
-                    dominio_base = urlparse(url).netloc
-
-                    # Obtener nuevas URLs para crawlear
-                    nuevas_urls = obtener_urls_sitio(url_actual, soup, urls_visitadas)
-                    urls_por_visitar.update(nuevas_urls)
-
-                    for link in soup.find_all('a'):
-                        href = link.get('href', '')
-                        if href:
-                            href_absoluto = urljoin(url_actual, href)
-                            dominio_enlace = urlparse(href_absoluto).netloc
-                            es_interno = dominio_enlace == dominio_base
-                            
-                            if es_interno:
-                                enlaces_internos += 1
-                            else:
-                                enlaces_externos += 1
-
-                            Enlace.objects.create(
-                                analisis=analisis,
-                                url=href_absoluto,
-                                texto=link.get_text().strip(),
-                                tipo='interno' if es_interno else 'externo'
-                            )
-
-                    if enlaces_internos < 3:
-                        puntuacion -= 5
-                        Hallazgo.objects.create(
-                            analisis=analisis,
-                            tipo='warning',
-                            descripcion='Pocos enlaces internos. Se recomienda más enlaces para mejorar la navegación.'
+                    # Guardar Hallazgos (con recomendaciones IA)
+                    for hallazgo_data in todos_hallazgos_info_pagina:
+                        # Generate AI recommendation for each original finding
+                        recomendacion_ai = obtener_recomendacion_ia(
+                            hallazgo_descripcion=hallazgo_data['descripcion'],
+                            url_pagina=url_actual,
+                            tecnologia_sitio=website_technology, # from form.cleaned_data
+                            tipo_hallazgo=hallazgo_data['tipo']
                         )
-
-                    if enlaces_externos < 2:
-                        puntuacion -= 3
+                        
+                        # Create a new Hallazgo for the AI recommendation
                         Hallazgo.objects.create(
-                            analisis=analisis,
-                            tipo='info',
-                            descripcion='Pocos enlaces externos. Los enlaces a sitios autoritativos pueden mejorar el SEO.'
+                            analisis=analisis_actual,
+                            tipo='recomendacion', # All AI-generated advice is a 'recomendacion'
+                            descripcion=recomendacion_ai 
                         )
+                        
+                        # Optionally, you might still want to save the original finding if it's distinct
+                        # from the recommendation or if recommendations are supplementary.
+                        # For this subtask, we are replacing/focusing on the AI recommendation.
+                        # If original findings are still needed, they should be created here as well:
+                        # Hallazgo.objects.create(
+                        #     analisis=analisis_actual,
+                        #     tipo=hallazgo_data['tipo'], # Original type
+                        #     descripcion=hallazgo_data['descripcion'] # Original description
+                        # )
 
-                    # Verificar robots.txt (solo para la URL principal)
-                    if url_actual == url:
-                        try:
-                            robots_url = urljoin(url, '/robots.txt')
-                            robots_response = requests.get(robots_url, timeout=5)
-                            if robots_response.status_code == 200:
-                                analisis.robots_txt = True
-                                analisis.save()
-                            else:
-                                puntuacion -= 2
-                                Hallazgo.objects.create(
-                                    analisis=analisis,
-                                    tipo='info',
-                                    descripcion='No se encontró archivo robots.txt'
-                                )
-                        except:
-                            pass
 
-                        # Verificar sitemap.xml
-                        try:
-                            sitemap_url = urljoin(url, '/sitemap.xml')
-                            sitemap_response = requests.get(sitemap_url, timeout=5)
-                            if sitemap_response.status_code == 200:
-                                analisis.sitemap_xml = True
-                                analisis.save()
-                            else:
-                                puntuacion -= 2
-                                Hallazgo.objects.create(
-                                    analisis=analisis,
-                                    tipo='info',
-                                    descripcion='No se encontró archivo sitemap.xml'
-                                )
-                        except:
-                            pass
-
-                    # Actualizar puntuación final
-                    analisis.puntuacion = max(0, min(100, puntuacion))
-                    analisis.save()
+                    # Guardar Imágenes
+                    for img_data in contenido_info['imagenes_info']:
+                        Imagen.objects.create(
+                            analisis=analisis_actual,
+                            url=img_data['url'],
+                            alt=img_data['alt']
+                        )
+                    
+                    # Guardar Enlaces
+                    for enlace_data in contenido_info['enlaces_info']:
+                        Enlace.objects.create(
+                            analisis=analisis_actual,
+                            url=enlace_data['url'],
+                            texto=enlace_data['texto'],
+                            tipo=enlace_data['tipo']
+                        )
+                    
+                    # Obtener nuevas URLs para crawlear (si aplica)
+                    if crawl_scope == 'multiple_pages':
+                        # urls_visitadas se usa para no agregar URLs ya procesadas o en cola
+                        # max_urls es el límite global
+                        if len(urls_visitadas) < max_urls:
+                            nuevas_urls = obtener_urls_sitio(url_actual, soup, urls_visitadas.union(urls_por_visitar))
+                            for nueva_url in nuevas_urls:
+                                if len(urls_visitadas) + len(urls_por_visitar) < max_urls:
+                                     urls_por_visitar.add(nueva_url)
+                                else:
+                                    break # Stop adding if we've hit the limit
 
                     # Marcar URL como visitada
                     urls_visitadas.add(url_actual)
 
-                except requests.RequestException:
-                    # Si hay un error al acceder a la URL, la saltamos
+                except requests.RequestException as e:
+                    messages.warning(request, f"Error al acceder a {url_actual}: {str(e)}. Saltando esta URL.")
+                    urls_visitadas.add(url_actual) # Marcar como visitada para no reintentar
+                    continue
+                except Exception as e: # Captura general para otros errores inesperados durante el análisis de una página
+                    messages.error(request, f"Error inesperado analizando {url_actual}: {str(e)}. Saltando esta URL.")
+                    urls_visitadas.add(url_actual) # Marcar como visitada para no reintentar
                     continue
 
             if analisis_principal:
-                # Actualizar la relación entre análisis
+                # Actualizar la relación entre análisis (si hay análisis relacionados)
                 for analisis in analisis_relacionados:
                     analisis.analisis_principal = analisis_principal
                     analisis.save()
 
-                messages.success(request, f'Análisis completado exitosamente. Se analizaron {len(urls_visitadas)} páginas.')
+                messages.success(request, f'Análisis completado. Se procesaron {len(urls_visitadas)} página(s).')
                 return redirect('analizador:resumen_analisis', pk=analisis_principal.pk)
-            else:
-                messages.error(request, 'No se pudo analizar la URL principal.')
+            elif not urls_visitadas and crawl_scope == 'single_url': # Failed to analyze even the single main URL
+                 messages.error(request, f'No se pudo analizar la URL proporcionada: {url}. Verifique la URL e intente de nuevo.')
+            elif not urls_visitadas and crawl_scope == 'multiple_pages':
+                 messages.error(request, f'No se pudo analizar la URL inicial: {url}. No se pudieron rastrear más páginas.')
+            else: # Should ideally be caught by specific errors, but as a fallback
+                 messages.info(request, f'Análisis finalizado. Se procesaron {len(urls_visitadas)} páginas, pero la URL principal no pudo ser completamente analizada o no se encontraron páginas adicionales.')
 
-        except requests.RequestException as e:
-            messages.error(request, f'Error al acceder a la URL: {str(e)}')
-        except Exception as e:
-            messages.error(request, f'Error durante el análisis: {str(e)}')
 
-    # Mostrar los últimos 5 análisis
+        else: # Form is not valid
+            # Django renders form errors automatically via {% bootstrap_form form %}
+            pass
+
     analisis_recientes = Analisis.objects.filter(
-        analisis_principal__isnull=True  # Solo URLs principales
+        analisis_principal__isnull=True
     ).order_by('-fecha_analisis')[:10]
-    return render(request, 'analizador/inicio.html', {'analisis_recientes': analisis_recientes})
+    return render(request, 'analizador/inicio.html', {'form': form, 'analisis_recientes': analisis_recientes})
 
 
 def detalle_analisis(request, pk):
