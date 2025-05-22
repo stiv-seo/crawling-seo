@@ -12,10 +12,9 @@ Herramienta de análisis SEO que realiza un crawling completo de sitios web y pr
 - Detección y análisis de `robots.txt` y `sitemap.xml`.
 - Análisis de enlaces internos y externos.
 - Verificación de imágenes y textos alternativos.
-- **Recomendaciones Potenciadas por IA:**
-    - Recibe sugerencias inteligentes y personalizadas para mejorar tu SEO.
-    - Las recomendaciones se adaptan a la **tecnología de tu sitio web** (ej. WordPress, Shopify, React, Django, etc.) para ofrecer consejos más precisos.
-    (*Nota: La integración completa con el modelo de lenguaje IA está en desarrollo; actualmente, se proporcionan recomendaciones basadas en plantillas avanzadas.*)
+- **Recomendaciones Potenciadas por Google Gemini:**
+    - Recibe sugerencias inteligentes y personalizadas para mejorar tu SEO, generadas por la **API de Google Gemini (modelo gemini-pro)**.
+    - Las recomendaciones se adaptan a la **tecnología de tu sitio web** (ej. WordPress, Shopify, React, Django, etc.) para ofrecer consejos más precisos y prácticos.
 
 ## Requisitos
 
@@ -23,7 +22,7 @@ Herramienta de análisis SEO que realiza un crawling completo de sitios web y pr
 - Django 4.2+
 - BeautifulSoup4
 - Requests
-- OpenAI (para la funcionalidad de recomendaciones IA)
+- google-generativeai (para la funcionalidad de recomendaciones con Google Gemini)
 
 ## Instalación
 
@@ -44,17 +43,46 @@ source venv/bin/activate  # En Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Realizar migraciones:
+4. **Configurar la API Key de Gemini (para Recomendaciones IA):**
+
+   ### Configuración de la API Key de Gemini
+
+   Para habilitar las recomendaciones SEO potenciadas por IA, necesitas configurar tu API key de Google Gemini:
+
+   1.  Obtén una API key desde [Google AI Studio](https://makersuite.google.com/ai-studio) (anteriormente MakerSuite) o tu proyecto en Google Cloud.
+   2.  Establece esta clave como una variable de entorno llamada `GEMINI_API_KEY`. Puedes hacerlo de las siguientes maneras:
+       *   **Usando un archivo `.env` (recomendado):**
+           Crea un archivo llamado `.env` en la raíz del proyecto (asegúrate de que `.env` esté incluido en tu archivo `.gitignore` para no subirlo al repositorio) y añade la siguiente línea:
+           ```
+           GEMINI_API_KEY='TU_API_KEY_REAL_AQUI'
+           ```
+           La aplicación utiliza `python-dotenv` (incluido en `requirements.txt`) para cargar automáticamente las variables de este archivo.
+       *   **Directamente en tu entorno de shell:**
+           -   Para Linux/macOS:
+               ```bash
+               export GEMINI_API_KEY='TU_API_KEY_REAL_AQUI'
+               ```
+           -   Para Windows (Command Prompt):
+               ```bash
+               set GEMINI_API_KEY='TU_API_KEY_REAL_AQUI'
+               ```
+           -   Para Windows (PowerShell):
+               ```bash
+               $Env:GEMINI_API_KEY='TU_API_KEY_REAL_AQUI'
+               ```
+   Si la API key no está configurada, la funcionalidad de recomendaciones IA retornará un mensaje indicando que no está disponible.
+
+5. Realizar migraciones:
 ```bash
 python manage.py migrate
 ```
 
-5. Crear superusuario (opcional):
+6. Crear superusuario (opcional):
 ```bash
 python manage.py createsuperuser
 ```
 
-6. Iniciar el servidor:
+7. Iniciar el servidor:
 ```bash
 python manage.py runserver
 ```
@@ -86,7 +114,7 @@ analizador/
         ├── detalle_analisis.html
         └── resumen_analisis.html
 ```
-La lógica principal del análisis, incluyendo la interacción con la IA (placeholder actual) y la extracción de datos SEO, se ha centralizado en `utils.py` para una mejor organización.
+La lógica principal del análisis, incluyendo la interacción con la API de Google Gemini y la extracción de datos SEO, se ha centralizado en `utils.py` para una mejor organización.
 
 ## Contribuir
 

@@ -5,4 +5,4 @@ python-dotenv==1.0.0
 django-bootstrap5==23.3
 whitenoise==6.6.0
 gunicorn==21.2.0
-openai # For AI recommendations
+google-generativeai==0.3.2 # For AI recommendations with Gemini

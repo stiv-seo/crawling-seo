@@ -6,9 +6,9 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 import re
-import openai
+# import openai # No longer needed
 import os # For API Key
-
+import google.generativeai as genai # Added for Gemini
 
 def obtener_codigo_estado(url):
     """
@@ -307,32 +307,67 @@ def verificar_archivos_seo(url_base):
 
 def obtener_recomendacion_ia(hallazgo_descripcion, url_pagina, tecnologia_sitio, tipo_hallazgo):
     """
-    Generates an AI-powered SEO recommendation.
-    For now, uses placeholder logic.
+    Generates an AI-powered SEO recommendation using Google Gemini.
     """
-    # TODO: Replace placeholder below with actual LLM API call and response handling.
-    # Consider adding error handling for API calls.
-    # openai.api_key = os.getenv("OPENAI_API_KEY")
-    # prompt = f"As an expert SEO consultant, provide a specific, actionable recommendation to address the following SEO issue found on the page {url_pagina}. The website is built with {tecnologia_sitio}.\n\nSEO Issue ({tipo_hallazgo}): {hallazgo_descripcion}\n\nRecommendation:"
-    # try:
-    #     response = openai.Completion.create( # Or use openai.ChatCompletion.create for newer models
-    #         engine="text-davinci-003", # Or a chat model like "gpt-3.5-turbo"
-    #         prompt=prompt,
-    #         max_tokens=150,
-    #         temperature=0.7,
-    #     )
-    #     recommendation = response.choices[0].text.strip()
-    #     return f"AI Recommendation: {recommendation}"
-    # except Exception as e:
-    #     return f"AI Recommendation (Error: Could not fetch): To fix '{hallazgo_descripcion}' on {url_pagina}, review SEO best practices for {tecnologia_sitio}."
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        # Consider logging this error as well for server-side visibility
+        # print("Error: GEMINI_API_KEY not configured.") 
+        return "Error: AI recommendations are currently unavailable (API key not configured). Please consult standard SEO best practices."
 
-    if tecnologia_sitio == 'wordpress':
-        return f"AI Recommendation for WordPress: To fix '{hallazgo_descripcion}' on {url_pagina}, you should consider using a plugin like Yoast SEO or Rank Math to edit the element (e.g., title, meta description, image alt text). After editing, ensure the new content meets SEO best practices for length, keywords, and clarity. For H1 tags, you might need to edit your theme's template files or use a page builder if one is active."
-    elif tecnologia_sitio == 'react' or tecnologia_sitio == 'angular' or tecnologia_sitio == 'vuejs':
-        return f"AI Recommendation for {tecnologia_sitio.capitalize()} SPA: To fix '{hallazgo_descripcion}' on {url_pagina}, you'll likely need to modify the relevant component's code. For issues like titles or meta descriptions, use libraries such as React Helmet (for React), Angular Meta, or vue-meta. For content issues like H1 tags or image alt texts, directly edit the JSX/template. Ensure your pre-rendering or Server-Side Rendering (SSR) setup correctly serves these changes to search engine crawlers."
-    elif tecnologia_sitio == 'shopify':
-        return f"AI Recommendation for Shopify: To fix '{hallazgo_descripcion}' on {url_pagina}, you can typically edit this through the Shopify admin panel. For product pages, edit the 'Search engine listing preview'. For other pages or theme elements (like H1s), you might need to edit your theme's Liquid files (e.g., `product.liquid`, `article.liquid`, or sections)."
-    elif tecnologia_sitio == 'django':
-        return f"AI Recommendation for Django: To fix '{hallazgo_descripcion}' on {url_pagina}, you will likely need to modify the Django template responsible for rendering this page (e.g., an `.html` file in your app's `templates` directory). For titles or meta descriptions, ensure they are passed from the view to the template context and rendered in the `<head>`. For H1s or image alts, modify the content directly in the template tags or context variables."
-    else: # Generic or other technologies
-        return f"AI Recommendation (Generic for {tecnologia_sitio if tecnologia_sitio else 'your website'}): To fix '{hallazgo_descripcion}' on {url_pagina}, identify where this content is generated in your {tecnologia_sitio if tecnologia_sitio else 'website'} setup (e.g., template files, CMS settings, component code) and modify it according to SEO best practices. Ensure changes improve relevance and user experience."
+    try:
+        genai.configure(api_key=api_key)
+        
+        model = genai.GenerativeModel('gemini-pro') # Or 'gemini-1.0-pro'
+
+        prompt = f"""As an expert SEO consultant, provide a specific, actionable recommendation to address the following SEO issue.
+The website is built with: {tecnologia_sitio if tecnologia_sitio else 'Unknown/Generic'}
+The issue was found on the page: {url_pagina}
+SEO Issue (Type: {tipo_hallazgo}): {hallazgo_descripcion}
+
+Focus on providing a practical solution that someone can implement.
+If the technology is '{tecnologia_sitio}', tailor the advice accordingly. If 'generic' or unknown, provide general advice.
+If providing code examples (e.g., for React, Django, WordPress PHP), keep them brief and illustrative.
+Structure your recommendation clearly. For example:
+1. **Understand the Issue:** Briefly explain why this is an issue.
+2. **How to Fix ({tecnologia_sitio if tecnologia_sitio else 'General'}):** Provide step-by-step instructions.
+3. **Tools/Plugins (if applicable for {tecnologia_sitio if tecnologia_sitio else 'General'}):** Suggest any relevant tools or plugins.
+4. **Verification:** How to check if the fix is successful.
+
+Recommendation:
+"""
+        # Safety settings can be adjusted if needed
+        # safety_settings = [
+        #     {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+        #     {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+        #     {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+        #     {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+        # ]
+        # response = model.generate_content(prompt, safety_settings=safety_settings)
+        
+        response = model.generate_content(prompt)
+
+        if response.parts:
+            # Ensure all parts are concatenated if the response is chunked.
+            recommendation = ''.join(part.text for part in response.parts if part.text)
+            if not recommendation.strip(): # Check if recommendation is just whitespace
+                 recommendation = f"AI received an empty or non-textual response for: {hallazgo_descripcion}"
+        elif response.text and response.text.strip():
+            recommendation = response.text
+        else: # Fallback if response.text is empty or parts are empty
+            recommendation = f"AI analysis complete, but no specific textual recommendation was generated for: {hallazgo_descripcion}. Please review standard SEO best practices for this type of issue ({tipo_hallazgo})."
+            
+        return recommendation
+
+    except ValueError as ve: # Handles errors like blocked prompts if safety settings are strict
+        # Log the specific ValueError: print(f"ValueError from Gemini: {ve}")
+        return f"AI recommendation for '{hallazgo_descripcion}' could not be generated due to content restrictions or an internal API error. Please review manually."
+    except genai.types.BlockedPromptException as bpe:
+        # Log the exception: print(f"BlockedPromptException from Gemini: {bpe}")
+        return f"AI recommendation for '{hallazgo_descripcion}' was blocked due to content safety policies. Please review the issue manually."
+    except genai.types.generation_types.StopCandidateException as sce:
+        # Log the exception: print(f"StopCandidateException from Gemini: {sce}")
+        return f"AI recommendation generation for '{hallazgo_descripcion}' was stopped prematurely. The issue might be too complex or the response too long. Please review manually."
+    except Exception as e:
+        # Log the general exception: print(f"General Error calling Gemini API: {type(e).__name__} - {e}")
+        return f"AI recommendation could not be generated for '{hallazgo_descripcion}'. An unexpected error occurred with the AI service."

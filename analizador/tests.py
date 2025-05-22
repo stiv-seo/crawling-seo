@@ -1,9 +1,12 @@
+import os # For os.getenv mocking
 from django.test import TestCase, Client
 from django.urls import reverse
 from .models import Analisis, Hallazgo, Imagen, Enlace
-from .forms import AnalisisForm # Import the form
-from unittest.mock import patch, MagicMock # For mocking
-from bs4 import BeautifulSoup # For testing utils
+from .forms import AnalisisForm
+from unittest.mock import patch, MagicMock, PropertyMock
+from bs4 import BeautifulSoup
+from .utils import obtener_recomendacion_ia, analizar_contenido_pagina, verificar_archivos_seo # Import the function to test
+import google.generativeai as genai # To mock its exceptions
 
 # Helper function to create a basic Analisis object for tests that need one
 def crear_analisis_test(url="https://ejemplo.com", tecnologia="generic", scope="single_url", num_pages=None):
@@ -458,25 +461,136 @@ class AnalizadorUtilsTests(TestCase):
         self.assertIn({'tipo': 'warning', 'descripcion': 'Error al intentar acceder a https://ejemplo.com/robots.txt.'}, resultado['hallazgos_info'])
         self.assertIn({'tipo': 'warning', 'descripcion': 'Error al intentar acceder a https://ejemplo.com/sitemap.xml.'}, resultado['hallazgos_info'])
 
-    def test_obtener_recomendacion_ia_placeholders(self):
-        """Test obtener_recomendacion_ia returns expected placeholder strings."""
-        # Test a few technology types
-        rec_wp = obtener_recomendacion_ia("Título corto", "https://ejemplo.com", "wordpress", "warning")
-        self.assertIn("AI Recommendation for WordPress", rec_wp)
-        self.assertIn("Yoast SEO or Rank Math", rec_wp)
+    @patch('analizador.utils.os.getenv')
+    def test_obtener_recomendacion_ia_no_api_key(self, mock_getenv):
+        """Test obtener_recomendacion_ia returns error if GEMINI_API_KEY is not set."""
+        mock_getenv.return_value = None
+        resultado = obtener_recomendacion_ia("Test finding", "https://test.com", "generic", "info")
+        self.assertEqual(resultado, "Error: AI recommendations are currently unavailable (API key not configured). Please consult standard SEO best practices.")
 
-        rec_react = obtener_recomendacion_ia("Sin H1", "https://ejemplo.com/react-page", "react", "error")
-        self.assertIn("AI Recommendation for React SPA", rec_react)
-        self.assertIn("React Helmet", rec_react)
+    @patch('analizador.utils.genai.configure')
+    @patch('analizador.utils.genai.GenerativeModel')
+    @patch('analizador.utils.os.getenv')
+    def test_obtener_recomendacion_ia_api_key_configured_and_prompt(self, mock_getenv, mock_generative_model, mock_configure):
+        """Test genai.configure is called and prompt is correct."""
+        mock_getenv.return_value = "test_api_key"
         
-        rec_generic = obtener_recomendacion_ia("Meta desc larga", "https://ejemplo.com/store", "generic", "info")
-        self.assertIn("AI Recommendation (Generic for generic)", rec_generic)
+        # Mock the model and its generate_content method
+        mock_model_instance = MagicMock()
+        mock_gemini_response = MagicMock()
+        # Simulate response with 'parts'
+        mock_part = MagicMock()
+        mock_part.text = "Mocked AI Recommendation"
+        type(mock_gemini_response).parts = PropertyMock(return_value=[mock_part])
+        # Also mock .text as a fallback if parts logic changes or for different response structures
+        type(mock_gemini_response).text = PropertyMock(return_value=None) # Ensure parts is used if available
+        mock_model_instance.generate_content.return_value = mock_gemini_response
+        mock_generative_model.return_value = mock_model_instance
 
-        rec_no_tech = obtener_recomendacion_ia("Pocos enlaces", "https_ejemplo.com/page", "", "warning")
-        self.assertIn("AI Recommendation (Generic for your website)", rec_no_tech)
+        hallazgo_desc = "Título demasiado corto"
+        url_pagina = "https://ejemplo.com/testpage"
+        tecnologia = "wordpress"
+        tipo_hallazgo = "warning"
 
-        # Check for TODO comment (by reading the function's source code)
-        import inspect
-        import analizador.utils
-        source_code = inspect.getsource(analizador.utils.obtener_recomendacion_ia)
-        self.assertIn("# TODO: Replace placeholder below with actual LLM API call", source_code)
+        resultado = obtener_recomendacion_ia(hallazgo_desc, url_pagina, tecnologia, tipo_hallazgo)
+
+        mock_getenv.assert_called_once_with("GEMINI_API_KEY")
+        mock_configure.assert_called_once_with(api_key="test_api_key")
+        mock_generative_model.assert_called_once_with('gemini-pro')
+        
+        # Check that generate_content was called
+        mock_model_instance.generate_content.assert_called_once()
+        # Get the actual prompt passed to generate_content
+        actual_prompt = mock_model_instance.generate_content.call_args[0][0]
+        
+        self.assertIn(hallazgo_desc, actual_prompt)
+        self.assertIn(url_pagina, actual_prompt)
+        self.assertIn(tecnologia, actual_prompt)
+        self.assertIn(tipo_hallazgo, actual_prompt)
+        self.assertIn("As an expert SEO consultant", actual_prompt)
+        self.assertEqual(resultado, "Mocked AI Recommendation")
+
+    @patch('analizador.utils.os.getenv', return_value="fake_key") # API Key is present
+    @patch('analizador.utils.genai.configure') # Mock configure
+    @patch('analizador.utils.genai.GenerativeModel') # Mock GenerativeModel class
+    def test_obtener_recomendacion_ia_successful_response_text_attribute(self, mock_generative_model, mock_configure, mock_getenv):
+        """Test successful API response handling via the .text attribute."""
+        mock_model_instance = MagicMock()
+        mock_gemini_response = MagicMock()
+        # Simulate response with direct .text attribute and empty/None parts
+        type(mock_gemini_response).parts = PropertyMock(return_value=[]) # No parts with text
+        type(mock_gemini_response).text = PropertyMock(return_value="Successful AI Response via text") # Text is directly available
+        mock_model_instance.generate_content.return_value = mock_gemini_response
+        mock_generative_model.return_value = mock_model_instance # mock_generative_model class returns our instance
+
+        recommendation = obtener_recomendacion_ia("Test Desc", "https://test.com", "generic", "info")
+        self.assertEqual(recommendation, "Successful AI Response via text")
+
+    @patch('analizador.utils.os.getenv', return_value="fake_key")
+    @patch('analizador.utils.genai.configure')
+    @patch('analizador.utils.genai.GenerativeModel')
+    def test_obtener_recomendacion_ia_empty_response(self, mock_generative_model, mock_configure, mock_getenv):
+        """Test handling of empty or non-textual API response."""
+        mock_model_instance = MagicMock()
+        mock_gemini_response = MagicMock()
+        type(mock_gemini_response).parts = PropertyMock(return_value=[]) # Empty parts
+        type(mock_gemini_response).text = PropertyMock(return_value="")   # Empty text
+        mock_model_instance.generate_content.return_value = mock_gemini_response
+        mock_generative_model.return_value = mock_model_instance
+
+        hallazgo_desc = "Vague issue"
+        recommendation = obtener_recomendacion_ia(hallazgo_desc, "https://test.com", "generic", "info")
+        expected_fallback = f"AI analysis complete, but no specific textual recommendation was generated for: {hallazgo_desc}. Please review standard SEO best practices for this type of issue (info)."
+        self.assertEqual(recommendation, expected_fallback)
+
+
+    @patch('analizador.utils.os.getenv', return_value="fake_key")
+    @patch('analizador.utils.genai.configure')
+    @patch('analizador.utils.genai.GenerativeModel')
+    def test_obtener_recomendacion_ia_api_value_error(self, mock_generative_model, mock_configure, mock_getenv):
+        """Test ValueError handling from Gemini API."""
+        mock_model_instance = MagicMock()
+        mock_model_instance.generate_content.side_effect = ValueError("Content restriction error")
+        mock_generative_model.return_value = mock_model_instance
+        
+        resultado = obtener_recomendacion_ia("Potentially problematic finding", "https://test.com", "generic", "error")
+        self.assertEqual(resultado, "AI recommendation for 'Potentially problematic finding' could not be generated due to content restrictions or an internal API error. Please review manually.")
+
+    @patch('analizador.utils.os.getenv', return_value="fake_key")
+    @patch('analizador.utils.genai.configure')
+    @patch('analizador.utils.genai.GenerativeModel')
+    def test_obtener_recomendacion_ia_api_blocked_prompt_error(self, mock_generative_model, mock_configure, mock_getenv):
+        """Test BlockedPromptException handling from Gemini API."""
+        mock_model_instance = MagicMock()
+        # Make sure the mocked exception type is correct, if it's genai.types.BlockedPromptException
+        # we might need to mock that specific type if it's not a standard exception.
+        # For now, assuming it's correctly imported as genai.types.BlockedPromptException in utils.py
+        mock_model_instance.generate_content.side_effect = genai.types.BlockedPromptException("Prompt blocked")
+        mock_generative_model.return_value = mock_model_instance
+        
+        resultado = obtener_recomendacion_ia("Blocked finding", "https://test.com", "generic", "error")
+        self.assertEqual(resultado, "AI recommendation for 'Blocked finding' was blocked due to content safety policies. Please review the issue manually.")
+
+    @patch('analizador.utils.os.getenv', return_value="fake_key")
+    @patch('analizador.utils.genai.configure')
+    @patch('analizador.utils.genai.GenerativeModel')
+    def test_obtener_recomendacion_ia_api_stop_candidate_error(self, mock_generative_model, mock_configure, mock_getenv):
+        """Test StopCandidateException handling from Gemini API."""
+        mock_model_instance = MagicMock()
+        mock_model_instance.generate_content.side_effect = genai.types.generation_types.StopCandidateException("Stopped early")
+        mock_generative_model.return_value = mock_model_instance
+        
+        resultado = obtener_recomendacion_ia("Complex finding", "https://test.com", "generic", "error")
+        self.assertEqual(resultado, "AI recommendation generation for 'Complex finding' was stopped prematurely. The issue might be too complex or the response too long. Please review manually.")
+
+    @patch('analizador.utils.os.getenv', return_value="fake_key")
+    @patch('analizador.utils.genai.configure')
+    @patch('analizador.utils.genai.GenerativeModel')
+    def test_obtener_recomendacion_ia_generic_api_error(self, mock_generative_model, mock_configure, mock_getenv):
+        """Test generic Exception handling from Gemini API."""
+        mock_model_instance = MagicMock()
+        mock_model_instance.generate_content.side_effect = Exception("Unknown API error")
+        mock_generative_model.return_value = mock_model_instance
+        
+        resultado = obtener_recomendacion_ia("Another finding", "https://test.com", "generic", "info")
+        self.assertEqual(resultado, "AI recommendation could not be generated for 'Another finding'. An unexpected error occurred with the AI service.")
