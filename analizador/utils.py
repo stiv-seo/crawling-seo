@@ -371,3 +371,47 @@ Recommendation:
     except Exception as e:
         # Log the general exception: print(f"General Error calling Gemini API: {type(e).__name__} - {e}")
         return f"AI recommendation could not be generated for '{hallazgo_descripcion}'. An unexpected error occurred with the AI service."
+
+
+def obtener_urls_sitio(url_base_actual, soup, urls_globales_conocidas):
+    """
+    Encuentra todos los enlaces únicos dentro del mismo dominio en la página actual,
+    excluyendo aquellos ya conocidos globalmente.
+
+    Args:
+        url_base_actual (str): La URL de la página que se está analizando actualmente.
+        soup (BeautifulSoup): El objeto BeautifulSoup de la página actual.
+        urls_globales_conocidas (set): Un conjunto de URLs que ya han sido visitadas
+                                      o están en la cola de URLs por visitar.
+    Returns:
+        set: Un conjunto de nuevas URLs encontradas en la página actual que pertenecen
+             al mismo dominio y no estaban en urls_globales_conocidas.
+    """
+    urls_encontradas_pagina = set()
+    dominio_principal = urlparse(url_base_actual).netloc
+
+    for link in soup.find_all('a', href=True):
+        href = link.get('href')
+        if not href:
+            continue
+
+        # Ignorar enlaces ancla y JavaScript
+        if href.startswith('#') or href.startswith('javascript:'):
+            continue
+
+        # Convertir URL relativa a absoluta
+        url_absoluta = urljoin(url_base_actual, href)
+        
+        # Parsear la URL absoluta para limpiarla y verificar el dominio
+        parsed_absoluta = urlparse(url_absoluta)
+        
+        # Verificar que la URL pertenece al mismo dominio principal
+        if parsed_absoluta.netloc == dominio_principal:
+            # Normalizar URL (eliminar fragmento y parámetros de consulta opcionalmente)
+            # Para este caso, solo eliminamos el fragmento para evitar duplicados por anclas.
+            url_limpia = parsed_absoluta._replace(fragment="").geturl()
+
+            if url_limpia not in urls_globales_conocidas:
+                urls_encontradas_pagina.add(url_limpia)
+    
+    return urls_encontradas_pagina
