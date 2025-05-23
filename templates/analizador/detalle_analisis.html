@@ -80,7 +80,6 @@
         </div>
         <div class="card-body">
             {% if hallazgos %}
-            {% if hallazgos %}
                 {% regroup hallazgos by tipo as hallazgos_por_tipo %}
                 {% for grupo in hallazgos_por_tipo %}
                     <div class="mb-4">
